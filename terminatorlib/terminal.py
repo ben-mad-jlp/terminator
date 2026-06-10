@@ -32,6 +32,7 @@ from . import plugin
 from terminatorlib.layoutlauncher import LayoutLauncher
 from . import regex
 from .minimap import Minimap
+from .linenumbers import LineNumbers
 
 # pylint: disable-msg=R0904
 class Terminal(Gtk.VBox):
@@ -336,11 +337,14 @@ class Terminal(Gtk.VBox):
         terminalbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
         self.scrollbar = Gtk.Scrollbar.new(Gtk.Orientation.VERTICAL, adjustment=self.vte.get_vadjustment())
         self.scrollbar.set_no_show_all(True)
-        # Activity minimap column on the left; hidden until toggled on from the
+        # Activity minimap column on the far left, and a row-number gutter just
+        # left of the terminal; both hidden until toggled on from the
         # right-click menu (per-terminal, session-only).
         self.minimap = Minimap(self)
+        self.linenumbers = LineNumbers(self)
 
         terminalbox.pack_start(self.minimap, False, True, 0)
+        terminalbox.pack_start(self.linenumbers, False, True, 0)
         terminalbox.pack_start(self.vte, True, True, 0)
         terminalbox.pack_start(self.scrollbar, False, True, 0)
         terminalbox.show_all()
@@ -1218,9 +1222,11 @@ class Terminal(Gtk.VBox):
         """Switch the minimap between activity-strip and scaled-text modes"""
         self.minimap.toggle_mode()
 
-    def do_minimap_hexlines_toggle(self):
-        """Toggle the hex row-number overlay on the minimap"""
-        self.minimap.toggle_hex_lines()
+    def do_linenumbers_toggle(self):
+        """Show or hide the row-number gutter left of the terminal"""
+        self.toggle_widget_visibility(self.linenumbers)
+        if self.linenumbers.get_property('visible'):
+            self.linenumbers.queue_draw()
 
     def do_bookmark_selection(self):
         """Bookmark the current selection on the minimap (and show it)"""

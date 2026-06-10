@@ -290,9 +290,9 @@ class TerminalPopupMenu(object):
         item.connect('toggled', lambda x: terminal.do_minimap_mode_toggle())
         menu.append(item)
 
-        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Minimap he_x line numbers'))
-        item.set_active(terminal.minimap.show_hex_lines)
-        item.connect('toggled', lambda x: terminal.do_minimap_hexlines_toggle())
+        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Show line _numbers'))
+        item.set_active(terminal.linenumbers.get_property('visible'))
+        item.connect('toggled', lambda x: terminal.do_linenumbers_toggle())
         menu.append(item)
 
         if hasattr(Gtk, 'Builder'):  # VERIFY FOR GTK3: is this ever false?

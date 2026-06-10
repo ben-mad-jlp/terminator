@@ -51,7 +51,6 @@ class Minimap(Gtk.DrawingArea):
         self.set_no_show_all(True)          # hidden until toggled on
 
         self.mode = 'strip'                 # 'strip' | 'text'
-        self.show_hex_lines = False         # overlay hex row numbers
         self._lines = []                    # raw row text, oldest..newest
         self._kinds = []                    # classification per row
         self._lengths = []                  # visible length per row
@@ -99,10 +98,6 @@ class Minimap(Gtk.DrawingArea):
 
     def toggle_mode(self):
         self.set_mode('text' if self.mode == 'strip' else 'strip')
-
-    def toggle_hex_lines(self):
-        self.show_hex_lines = not self.show_hex_lines
-        self.queue_draw()
 
     # ---- data ------------------------------------------------------------
 
@@ -305,20 +300,6 @@ class Minimap(Gtk.DrawingArea):
         cr.set_line_width(1)
         cr.rectangle(0.5, top + 0.5, width - 1, bot - top - 1)
         cr.stroke()
-
-        # optional hex row-number overlay
-        if self.show_hex_lines:
-            cr.select_font_face('monospace', 0, 0)
-            cr.set_font_size(8)
-            step = max(12, height // 12)
-            for y in range(2, height, step):
-                idx = int(y * n / height)
-                cr.set_source_rgba(0, 0, 0, 0.55)
-                cr.rectangle(1, y, 38, 9)
-                cr.fill()
-                cr.set_source_rgba(0.85, 0.85, 0.9, 0.9)
-                cr.move_to(2, y + 8)
-                cr.show_text('0x%X' % (self._scan_start + idx))
         return False
 
     # ---- interaction -----------------------------------------------------
