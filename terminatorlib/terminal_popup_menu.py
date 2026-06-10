@@ -162,6 +162,11 @@ class TerminalPopupMenu(object):
 
         menu.append(item)
 
+        item = Gtk.MenuItem.new_with_mnemonic(_('_Bookmark selection'))
+        item.connect('activate', lambda x: terminal.do_bookmark_selection())
+        item.set_sensitive(terminal.vte.get_has_selection())
+        menu.append(item)
+
         item = self.menu_item(Gtk.ImageMenuItem, 'paste', _('_Paste'))
         item.connect('activate', lambda x: terminal.paste_clipboard())
         menu.append(item)
@@ -273,6 +278,21 @@ class TerminalPopupMenu(object):
                                                    _('Show _scrollbar'))
         item.set_active(terminal.scrollbar.get_property('visible'))
         item.connect('toggled', lambda x: terminal.do_scrollbar_toggle())
+        menu.append(item)
+
+        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Show _minimap'))
+        item.set_active(terminal.minimap.get_property('visible'))
+        item.connect('toggled', lambda x: terminal.do_minimap_toggle())
+        menu.append(item)
+
+        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Minimap scaled _text mode'))
+        item.set_active(terminal.minimap.mode == 'text')
+        item.connect('toggled', lambda x: terminal.do_minimap_mode_toggle())
+        menu.append(item)
+
+        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Show line _numbers'))
+        item.set_active(terminal.linenumbers.get_property('visible'))
+        item.connect('toggled', lambda x: terminal.do_linenumbers_toggle())
         menu.append(item)
 
         if hasattr(Gtk, 'Builder'):  # VERIFY FOR GTK3: is this ever false?
