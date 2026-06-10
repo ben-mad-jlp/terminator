@@ -110,7 +110,15 @@ class Titlebar(Gtk.EventBox):
             temp_heldtext_str = _('[INACTIVE: Right-Click for Relaunch option] ')
         if not self.config['title_hide_sizetext']:
             temp_sizetext_str = " %s" % (self.sizetext)
-        self.label.set_text("%s%s%s" % (temp_heldtext_str, self.termtext, temp_sizetext_str))
+        # Prefix the terminal's auto-assigned name so it is visible. set_text is
+        # a no-op when the label is custom (a `rename`), so a renamed terminal
+        # keeps its clean custom name instead of getting this prefix.
+        name_prefix = ''
+        assigned = getattr(self.terminal, 'assigned_name', None)
+        if assigned:
+            name_prefix = '[%s] ' % assigned
+        self.label.set_text("%s%s%s%s" % (temp_heldtext_str, name_prefix,
+                                          self.termtext, temp_sizetext_str))
 
         if (not self.config['title_use_system_font']) and self.config['title_font']:
             title_font = Pango.FontDescription(self.config['title_font'])

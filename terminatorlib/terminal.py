@@ -216,6 +216,7 @@ class Terminal(Gtk.VBox):
         # it with a custom name.
         Terminal._name_counter += 1
         self.assigned_name = 'term-%d' % Terminal._name_counter
+        self.titlebar.update()  # render the name prefix now that it's set
 
     def set_background_image(self,image):
         try: 
