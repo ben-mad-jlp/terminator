@@ -329,10 +329,16 @@ class MCPBridge(plugin.Plugin):
                 window_title = term.get_toplevel().get_title()
             except Exception:
                 window_title = None
+            # Custom titlebar label set via `rename` (None unless customized).
+            try:
+                custom_title = term.titlebar.get_custom_string()
+            except Exception:
+                custom_title = None
             out.append({
                 'uuid': term.uuid.urn,
                 'title': title,
                 'window_title': window_title,
+                'custom_title': custom_title,
                 'is_focused': term is focused,
                 'cwd': cwd,
                 'rows': vte.get_row_count() if vte else None,

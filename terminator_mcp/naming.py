@@ -43,14 +43,21 @@ def resolve(terminal):
     if terminal in uuids:
         return terminal
 
-    # 2. friendly name (case-insensitive) against titles
+    # 2. friendly name (case-insensitive) against any of the terminal's
+    #    names: a custom titlebar label (set via `rename`), the VTE/OSC title,
+    #    or the window title. custom_title is checked first so a renamed
+    #    terminal is reliably addressable by its new name.
     needle = terminal.strip().lower()
-    matches = [t for t in terminals
-               if (t.get('title') or '').strip().lower() == needle]
+
+    def _names(t):
+        return [(t.get(k) or '').strip().lower()
+                for k in ('custom_title', 'title', 'window_title')]
+
+    matches = [t for t in terminals if needle in _names(t)]
     if len(matches) == 1:
         return matches[0]['uuid']
     if len(matches) > 1:
-        raise ValueError('ambiguous_name: %d terminals titled %r'
+        raise ValueError('ambiguous_name: %d terminals named %r'
                          % (len(matches), terminal))
 
     raise ValueError('terminal_not_found: %r' % terminal)
