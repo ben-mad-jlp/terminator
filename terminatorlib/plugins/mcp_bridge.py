@@ -436,6 +436,38 @@ class MCPBridge(plugin.Plugin):
         lines = [ln for ln in text.splitlines() if ln.strip()]
         return lines[-1] if lines else ''
 
+    def _wait_ready(self, vte, max_ms=2000):
+        """Block (pumping the loop) until the terminal shows a prompt.
+
+        A freshly-spawned shell has a blank screen until it draws its first
+        prompt; feeding before then races shell startup. We wait until the last
+        visible line is non-empty, capped at max_ms so we never hang.
+        """
+        if self._last_nonempty_line(vte):
+            return
+        loop = GLib.MainLoop()
+        live = {'poll', 'timeout'}
+
+        def poll():
+            if self._last_nonempty_line(vte):
+                live.discard('poll')
+                loop.quit()
+                return False
+            return True
+
+        def on_timeout():
+            live.discard('timeout')
+            loop.quit()
+            return False
+
+        poll_id = GLib.timeout_add(60, poll)
+        timeout_id = GLib.timeout_add(max_ms, on_timeout)
+        loop.run()
+        if 'poll' in live:
+            GLib.source_remove(poll_id)
+        if 'timeout' in live:
+            GLib.source_remove(timeout_id)
+
     def _h_probe_terminal(self, args):
         """Cheap preflight the MCP server calls before any write."""
         term = self._resolve(args.get('uuid', ''))
@@ -448,22 +480,21 @@ class MCPBridge(plugin.Plugin):
         }
 
     def _h_run_command_capture(self, args):
-        """Run a command in the terminal's shell and capture its output.
+        """Run a command and capture its output, keeping the command line clean.
 
-        Brackets the command with two unique sentinels:
-            printf "<START>\\n"; <command>; printf "\\n<END> $?\\n"
-        and reads the bottom of the buffer each poll, slicing the text strictly
-        between the START and END (exit-code) sentinel lines. Bracketing makes
-        capture immune to the terminal scrolling in place (where the buffer row
-        count does not grow, so an absolute-row anchor would miss the output)
-        and to prompt/echo noise — the `^...$` anchors never match the echoed
-        command line, which carries the markers embedded inside `printf "..."`.
+        The command is fed ALONE (so its echo looks exactly like what a user
+        typed), then a single exit-code marker is fed on its own line:
+            <command>
+            printf "<END> $?\\n"
+        We poll the bottom of the buffer (nested GLib loop, never a blocking
+        sleep) until the END marker appears, then take everything before it,
+        drop the command-echo line and the trailing marker/prompt echo, and
+        return the output. `$?` is read on the line after the command; on most
+        interactive shells (incl. zsh) this is the command's status, but a shell
+        whose prompt hook clobbers $? may report 0 — exit_code is best-effort.
 
-        A NESTED GLib main loop is pumped (so the child's output is actually
-        processed) and the buffer polled every CAPTURE_POLL_MS until the END
-        sentinel appears or the timeout fires — never a blocking sleep.
-        Best-effort: interactive TUIs / shells that rewrite the line can defeat
-        the sentinels (documented; fall back to send_keys + read_terminal).
+        Best-effort overall: interactive TUIs / line-rewriting shells defeat the
+        marker (documented; fall back to send_keys + read_terminal).
         """
         term = self._resolve(args.get('uuid', ''))
         vte = term.get_vte()
@@ -471,18 +502,18 @@ class MCPBridge(plugin.Plugin):
         timeout_ms = _clamp(int(args.get('timeout_ms', CAPTURE_TIMEOUT_MS)),
                             100, CAPTURE_TIMEOUT_CAP)
 
+        # Wait for the shell prompt before feeding (avoids racing shell startup).
+        self._wait_ready(vte)
+
         nonce = os.urandom(8).hex()
-        start_marker = '__MCP_S_%s__' % nonce
         end_marker = '__MCP_E_%s__' % nonce
-        start_re = re.compile(r'(?m)^%s\s*$' % re.escape(start_marker))
-        end_re = re.compile(r'(?m)^%s (\d+)\s*$' % re.escape(end_marker))
+        end_re = re.compile(r'(?m)^%s (-?\d+)\s*$' % re.escape(end_marker))
 
-        # Feed: start sentinel, the command, then end sentinel + exit code.
-        payload = 'printf "%s\\n"; %s; printf "\\n%s %%s\\n" "$?"\n' % (
-            start_marker, command, end_marker)
-        term.feed(payload)
+        # Feed the command on its own line (clean echo), then the exit-code
+        # marker on a separate line.
+        term.feed(command + '\n')
+        term.feed('printf "%s %%s\\n" "$?"\n' % end_marker)
 
-        # Read the bottom-most window each poll (bounded → no UI freeze).
         readback = _clamp(int(vte.get_row_count()) + 1000, 1, MAX_LINES_CAP)
 
         def read_tail():
@@ -515,18 +546,12 @@ class MCPBridge(plugin.Plugin):
         timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
         state['live'].update({'poll', 'timeout'})
         loop.run()
-        # Remove only timers still active (a fired one auto-removed itself).
         if 'poll' in state['live']:
             GLib.source_remove(poll_id)
         if 'timeout' in state['live']:
             GLib.source_remove(timeout_id)
 
-        # Slice the body between the START sentinel and the END sentinel.
-        body = state['text']
-        start_match = start_re.search(body)
-        if start_match:
-            body = body[start_match.end():]
-        output = body.strip('\n')
+        output = self._extract_output(state['text'], command, end_marker)
         return {
             'ok': state['found'],
             'output': output,
@@ -534,6 +559,32 @@ class MCPBridge(plugin.Plugin):
             'timed_out': not state['found'],
             'command': command,
         }
+
+    @staticmethod
+    def _extract_output(text, command, end_marker):
+        """Pull the command's output from the captured tail.
+
+        The tail (before the END marker) looks like:
+            <prompt> <command>          <- command echo
+            <output...>
+            <prompt> printf "<END> ..."  <- the marker-feed echo
+        Drop the leading command-echo line and trailing marker/prompt-echo and
+        blank lines, leaving the output.
+        """
+        lines = text.split('\n')
+        # Drop the command-echo line: the first line that ends with the command.
+        cmd_tail = command.strip().splitlines()[0] if command.strip() else ''
+        for i, line in enumerate(lines):
+            if cmd_tail and line.rstrip().endswith(cmd_tail):
+                lines = lines[i + 1:]
+                break
+        else:
+            if lines:
+                lines = lines[1:]
+        # Drop trailing marker-echo / prompt / blank lines.
+        while lines and (end_marker in lines[-1] or not lines[-1].strip()):
+            lines.pop()
+        return '\n'.join(lines).strip('\n')
 
     # ---- handlers (P2: send / search / focus / raw read) ----------------
 
