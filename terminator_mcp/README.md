@@ -27,24 +27,79 @@ dependency).
 
 ## Install & run
 
-1. Install the GTK/VTE Python stack Terminator needs (if not already):
-   - Linux: your distro's `python3-gi` + `gir1.2-vte-2.91`.
-   - macOS (Homebrew): `brew install pygobject3 gtk+3 vte3`.
-2. Enable the bridge plugin — either via Terminator's **Preferences →
-   Plugins** (tick *MCPBridge*), or in `~/.config/terminator/config`:
-   ```ini
-   [global_config]
-     enabled_plugins = MCPBridge
-   ```
-   (Also requires `psutil`, a standard Terminator dependency.) Restart
-   Terminator. The bridge opens a socket at
-   `$XDG_RUNTIME_DIR/terminator-mcp-$UID/bridge.sock` (Linux) or
-   `$TMPDIR/terminator-mcp-$UID/bridge.sock` (macOS).
-3. Install this package and register it with Claude Code:
-   ```sh
-   pip install -e .            # from terminator_mcp/
-   claude mcp add terminator -- python -m terminator_mcp
-   ```
+There are **two pieces**:
+
+- **(A) the bridge plugin** — runs *inside* Terminator, so it needs the same
+  Python that runs Terminator (GTK/VTE). This is the part that differs by OS.
+- **(B) the MCP server** (this package) — a standalone process that only needs
+  the `mcp` package. **Identical on Linux and macOS**; it never imports GTK/VTE.
+
+They talk over a per-user Unix socket
+(`$XDG_RUNTIME_DIR/terminator-mcp-$UID/bridge.sock` on Linux,
+`$TMPDIR/terminator-mcp-$UID/bridge.sock` on macOS). Tools return
+`{"error":"terminator_not_running"}` until Terminator is up with the plugin.
+
+Replace `/path/to/terminator` below with your checkout path.
+
+### Ubuntu / Linux
+
+**A. Plugin**
+```bash
+sudo apt install terminator python3-gi gir1.2-vte-2.91 python3-psutil python3-configobj
+mkdir -p ~/.config/terminator/plugins
+cp /path/to/terminator/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator/plugins/
+```
+Enable it (Preferences → Plugins → tick **MCPBridge**, or in
+`~/.config/terminator/config`):
+```ini
+[global_config]
+  enabled_plugins = MCPBridge
+```
+Restart Terminator.
+
+**B. MCP server**
+```bash
+python3 -m venv ~/.local/share/terminator-mcp/venv
+~/.local/share/terminator-mcp/venv/bin/pip install mcp
+claude mcp add terminator \
+  --env PYTHONPATH=/path/to/terminator \
+  -- ~/.local/share/terminator-mcp/venv/bin/python -m terminator_mcp
+```
+
+### macOS (Homebrew GTK)
+
+Terminator isn't a native Mac app; run it under Homebrew's GTK Python.
+
+**A. Plugin**
+```bash
+brew install pygobject3 gtk+3 vte3
+# a venv that can see Homebrew's gi, plus Terminator's pure-python deps
+/opt/homebrew/bin/python3 -m venv --system-site-packages ~/.local/share/terminator-gtk
+~/.local/share/terminator-gtk/bin/pip install psutil configobj
+mkdir -p ~/.config/terminator/plugins
+cp /path/to/terminator/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator/plugins/
+```
+Enable `MCPBridge` in `~/.config/terminator/config` (same `[global_config]`
+stanza). Launch Terminator with that Python from the checkout:
+```bash
+cd /path/to/terminator
+( ulimit -n 1024; ~/.local/share/terminator-gtk/bin/python ./terminator )
+```
+> **macOS gotcha:** keep `ulimit -n` finite (e.g. `1024`). If it is `unlimited`,
+> glib's `fdwalk` fails and new shells won't spawn inside Terminator.
+
+**B. MCP server** — same as Linux (a venv with `mcp` + `claude mcp add … PYTHONPATH=…`).
+It is a pure socket client and does **not** need GTK.
+
+### Sanity check (both platforms)
+
+1. Start Terminator — the plugin loads when the first terminal is created.
+2. In Claude, call `list_terminals`. You should see your terminal. A
+   `terminator_not_running` error means the plugin isn't loaded (check it is in
+   `enabled_plugins` and on the plugin path).
+
+The minimap, line-number gutter, and bookmark menus are pure GUI and work
+regardless of the MCP server.
 
 ## Tools
 
