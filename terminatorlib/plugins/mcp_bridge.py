@@ -336,6 +336,7 @@ class MCPBridge(plugin.Plugin):
                 custom_title = None
             out.append({
                 'uuid': term.uuid.urn,
+                'name': getattr(term, 'assigned_name', None),
                 'title': title,
                 'window_title': window_title,
                 'custom_title': custom_title,
@@ -766,6 +767,8 @@ class MCPBridge(plugin.Plugin):
         term = self._resolve(args.get('uuid', ''))
         title = args.get('title', '')
         term.titlebar.set_custom_string(title)
+        # Also make the new name the terminal's addressable name.
+        term.assigned_name = title
         return {'ok': True, 'uuid': term.uuid.urn, 'title': title}
 
     # ---- handlers: navigation + minimap bookmarks -----------------------

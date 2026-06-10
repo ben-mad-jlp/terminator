@@ -107,7 +107,7 @@ Read-only (P0):
 
 | Tool | Args | Returns |
 |------|------|---------|
-| `list_terminals` | — | `{terminals: [{uuid, title, window_title, is_focused, cwd, rows, cols}]}` |
+| `list_terminals` | — | `{terminals: [{uuid, name, title, window_title, is_focused, cwd, rows, cols}]}` (`name` auto-assigned `term-N`, or the rename) |
 | `get_focused_terminal` | — | `{uuid}` |
 | `tail` | `terminal?, lines=40` | `{text, total_rows, cursor_row, range, next_offset}` |
 | `read_terminal` | `terminal?, mode='scrollback', max_lines=2000, offset=0, from_end=true` | `{text, total_rows, cursor_row, range, next_offset}` |

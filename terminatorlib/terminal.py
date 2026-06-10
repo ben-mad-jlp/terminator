@@ -95,6 +95,9 @@ class Terminal(Gtk.VBox):
     titlebar = None
     searchbar = None
 
+    # Auto-incrementing default name (see assigned_name in __init__).
+    _name_counter = 0
+
     group = None
     cwd = None
     origcwd = None
@@ -205,6 +208,14 @@ class Terminal(Gtk.VBox):
                 os.putenv('http_proxy', self.config['http_proxy'])
         self.reconfigure()
         self.vte.set_size(80, 24)
+
+        # Auto-assign an incrementing, addressable name (used by the MCP bridge
+        # for name resolution) so every terminal is referable by name even if
+        # one was never explicitly set. This does NOT touch the visible
+        # titlebar, so the dynamic shell title is preserved; `rename` overrides
+        # it with a custom name.
+        Terminal._name_counter += 1
+        self.assigned_name = 'term-%d' % Terminal._name_counter
 
     def set_background_image(self,image):
         try: 

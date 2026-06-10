@@ -51,7 +51,7 @@ def resolve(terminal):
 
     def _names(t):
         return [(t.get(k) or '').strip().lower()
-                for k in ('custom_title', 'title', 'window_title')]
+                for k in ('name', 'custom_title', 'title', 'window_title')]
 
     matches = [t for t in terminals if needle in _names(t)]
     if len(matches) == 1:
