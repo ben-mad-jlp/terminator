@@ -275,6 +275,11 @@ class TerminalPopupMenu(object):
         item.connect('toggled', lambda x: terminal.do_scrollbar_toggle())
         menu.append(item)
 
+        item = Gtk.CheckMenuItem.new_with_mnemonic(_('Show _minimap'))
+        item.set_active(terminal.minimap.get_property('visible'))
+        item.connect('toggled', lambda x: terminal.do_minimap_toggle())
+        menu.append(item)
+
         if hasattr(Gtk, 'Builder'):  # VERIFY FOR GTK3: is this ever false?
             item = self.menu_item(Gtk.MenuItem, 'preferences',
                                                 _('_Preferences'))

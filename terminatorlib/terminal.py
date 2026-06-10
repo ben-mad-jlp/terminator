@@ -31,6 +31,7 @@ from .signalman import Signalman
 from . import plugin
 from terminatorlib.layoutlauncher import LayoutLauncher
 from . import regex
+from .minimap import Minimap
 
 # pylint: disable-msg=R0904
 class Terminal(Gtk.VBox):
@@ -335,7 +336,11 @@ class Terminal(Gtk.VBox):
         terminalbox = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
         self.scrollbar = Gtk.Scrollbar.new(Gtk.Orientation.VERTICAL, adjustment=self.vte.get_vadjustment())
         self.scrollbar.set_no_show_all(True)
+        # Activity minimap column on the left; hidden until toggled on from the
+        # right-click menu (per-terminal, session-only).
+        self.minimap = Minimap(self)
 
+        terminalbox.pack_start(self.minimap, False, True, 0)
         terminalbox.pack_start(self.vte, True, True, 0)
         terminalbox.pack_start(self.scrollbar, False, True, 0)
         terminalbox.show_all()
@@ -1202,6 +1207,12 @@ class Terminal(Gtk.VBox):
     def do_scrollbar_toggle(self):
         """Show or hide the terminal scrollbar"""
         self.toggle_widget_visibility(self.scrollbar)
+
+    def do_minimap_toggle(self):
+        """Show or hide the terminal activity minimap column"""
+        self.toggle_widget_visibility(self.minimap)
+        if self.minimap.get_property('visible'):
+            self.minimap.refresh_now()
 
     def toggle_widget_visibility(self, widget):
         """Show or hide a widget"""
