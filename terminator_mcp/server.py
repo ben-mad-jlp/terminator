@@ -308,6 +308,93 @@ def focus_terminal(terminal: str) -> dict:
 
 
 @mcp.tool()
+def rename(terminal: str, title: str) -> dict:
+    """Rename a terminal — set its titlebar label (persistent, per-terminal).
+
+    Unlike a tab label (shared by split panes), this names the individual
+    terminal and survives the running program changing its own title.
+    terminal: uuid or current friendly title.
+    """
+    try:
+        uuid = _resolve(terminal)
+        return socket_client.call('rename_terminal',
+                                  {'uuid': uuid, 'title': title})
+    except (socket_client.BridgeError, ValueError) as ex:
+        return _err(ex)
+
+
+@mcp.tool()
+def scroll_to(terminal: str = '', row: int = -1, position: str = '') -> dict:
+    """Scroll a terminal to an absolute buffer row (or 'top'/'bottom').
+
+    Use a `row` from find_in_scrollback / list_bookmarks to jump there
+    (centered). row < 0 with no position scrolls to the bottom (live output).
+    terminal: uuid or friendly title; empty = focused.
+    """
+    try:
+        uuid = _resolve(terminal)
+        args = {'uuid': uuid, 'row': row}
+        if position:
+            args['position'] = position
+        return socket_client.call('scroll_to', args)
+    except (socket_client.BridgeError, ValueError) as ex:
+        return _err(ex)
+
+
+@mcp.tool()
+def list_bookmarks(terminal: str = '') -> dict:
+    """List the minimap bookmarks for a terminal as {row, label}.
+
+    Pair with scroll_to(row=...) to jump to a bookmark. terminal: uuid or
+    friendly title; empty = focused.
+    """
+    try:
+        uuid = _resolve(terminal)
+        return socket_client.call('list_bookmarks', {'uuid': uuid})
+    except (socket_client.BridgeError, ValueError) as ex:
+        return _err(ex)
+
+
+@mcp.tool()
+def add_bookmark(terminal: str = '', row: int = -1, pattern: str = '',
+                 label: str = '', regex: bool = False,
+                 case_sensitive: bool = False) -> dict:
+    """Add a minimap bookmark — by absolute row OR by text/pattern search.
+
+    Provide `pattern` to bookmark the first matching line (the matched line
+    becomes the label unless you pass one); `regex=false` matches literally.
+    Otherwise provide `row` (an absolute buffer row, e.g. from
+    find_in_scrollback). terminal: uuid or friendly title; empty = focused.
+    """
+    try:
+        uuid = _resolve(terminal)
+        args = {'uuid': uuid, 'label': label}
+        if pattern:
+            args.update({'pattern': pattern, 'regex': regex,
+                         'case_sensitive': case_sensitive})
+        else:
+            args['row'] = row
+        return socket_client.call('add_bookmark', args)
+    except (socket_client.BridgeError, ValueError) as ex:
+        return _err(ex)
+
+
+@mcp.tool()
+def rename_tab(terminal: str, title: str) -> dict:
+    """Rename the TAB containing a terminal (the notebook tab label).
+
+    The label is shared by all split panes in that tab. To rename a single
+    pane instead, use `rename`. terminal: uuid or current friendly title.
+    """
+    try:
+        uuid = _resolve(terminal)
+        return socket_client.call('set_tab_title',
+                                  {'uuid': uuid, 'title': title})
+    except (socket_client.BridgeError, ValueError) as ex:
+        return _err(ex)
+
+
+@mcp.tool()
 def read_raw(terminal: str = '', start_row: int = 0, end_row: int = 0) -> dict:
     """Read an explicit absolute row range from the buffer (escape hatch).
 

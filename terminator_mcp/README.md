@@ -68,6 +68,11 @@ Write / command (gated — see Safety):
 | `send_keys` ⚠ | `text, terminal?, enter=false, raw=false, confirm_token?` | `{ok, sent_bytes, visible_text}` / `{requires_confirmation, …}` |
 | `confirm` | `confirm_token` | result of the deferred run/send |
 | `focus_terminal` | `terminal` | `{ok, uuid}` |
+| `rename` | `terminal, title` | rename one terminal's titlebar (per-pane) |
+| `rename_tab` | `terminal, title` | rename the tab containing a terminal |
+| `scroll_to` | `terminal?, row, position?` | scroll to a row (or 'top'/'bottom'); row<0 = bottom |
+| `add_bookmark` | `terminal?, row \| pattern, label?, regex?, case_sensitive?` | bookmark a row, by number or text search |
+| `list_bookmarks` | `terminal?` | minimap bookmarks `[{row, label}]` |
 
 `terminal` accepts a UUID or a friendly title (case-insensitive); empty selects
 the focused terminal. If Terminator isn't running / the plugin isn't enabled,

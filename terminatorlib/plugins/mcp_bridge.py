@@ -164,6 +164,11 @@ class MCPBridge(plugin.Plugin):
             'new_tab': self._h_new_tab,
             'split': self._h_split,
             'set_tab_title': self._h_set_tab_title,
+            'rename_terminal': self._h_rename_terminal,
+            # navigation + minimap bookmarks
+            'scroll_to': self._h_scroll_to,
+            'list_bookmarks': self._h_list_bookmarks,
+            'add_bookmark': self._h_add_bookmark,
         }
         # Start the socket exactly once for the whole process.
         if _RUNNING['service'] is None:
@@ -569,29 +574,41 @@ class MCPBridge(plugin.Plugin):
         pattern = args.get('pattern', '')
         flags = 0 if args.get('case_sensitive') else re.IGNORECASE
         max_matches = _clamp(int(args.get('max_matches', 200)), 1, 2000)
+        matches, truncated = self._search_rows(
+            vte, pattern, bool(args.get('case_sensitive')),
+            regex=True, max_matches=max_matches)
+        return {'count': len(matches), 'matches': matches,
+                'truncated': truncated}
+
+    def _search_rows(self, vte, pattern, case_sensitive=False, regex=True,
+                     max_matches=200):
+        """Scan PHYSICAL rows one at a time so each match's row is exactly the
+        row read_raw(row) reproduces (a bulk read + splitlines drifts because
+        get_text_range joins wrapped rows). Bounded to the most recent
+        SEARCH_SCAN_CAP rows. Returns (matches, truncated)."""
+        flags = 0 if case_sensitive else re.IGNORECASE
+        pat = pattern if regex else re.escape(pattern)
         try:
-            rx = re.compile(pattern, flags)
+            rx = re.compile(pat, flags)
         except re.error as ex:
             raise _BridgeError('bad_regex: %s' % ex)
         vadj = vte.get_vadjustment()
         lower = int(vadj.get_lower())
         total = int(vadj.get_upper())
-        # Scan PHYSICAL rows one at a time so each match's row is exactly the
-        # row read_raw(row) will reproduce. (A bulk read + splitlines drifts
-        # because get_text_range joins wrapped continuation rows.) Bounded to
-        # the most recent SEARCH_SCAN_CAP rows to keep the scan fast.
         start = max(lower, total - SEARCH_SCAN_CAP)
         matches = []
         truncated = False
         for row in range(start, total):
             line = _read_rows(vte, row, row).rstrip('\n')
-            if line and rx.search(line):
+            if not line or '__MCP_S_' in line or '__MCP_E_' in line:
+                # skip our own injected run_command capture sentinels
+                continue
+            if rx.search(line):
                 matches.append({'row': row, 'line': line})
                 if len(matches) >= max_matches:
                     truncated = True
                     break
-        return {'count': len(matches), 'matches': matches,
-                'truncated': truncated}
+        return matches, truncated
 
     def _h_focus_terminal(self, args):
         term = self._resolve(args.get('uuid', ''))
@@ -627,20 +644,29 @@ class MCPBridge(plugin.Plugin):
             raise _BridgeError('uuid_detect_failed')
         return added[0]
 
-    def _set_tab_title(self, uuid, title):
-        """Set the tab label of the tab containing `uuid` (mirrors ipc.py)."""
-        term = self.terminator.find_terminal_by_uuid(uuid)
-        if term is None:
-            return False
+    def _set_tab_title(self, term, title):
+        """Set the label of the tab CONTAINING `term` (not the current tab).
+
+        ipc.py's set_tab_title renames whatever tab is active; to rename a tab
+        by one of its terminals we locate the notebook page whose descendants
+        include `term` (the approach ipc.py's get_tab_title uses).
+        """
+        from terminatorlib.factory import Factory
+        from terminatorlib.util import enumerate_descendants
         window = term.get_toplevel()
         if not window.is_child_notebook():
             return False
         notebook = window.get_children()[0]
-        n_page = notebook.get_current_page()
-        page = notebook.get_nth_page(n_page)
-        label = notebook.get_tab_label(page)
-        label.set_custom_label(title, force=True)
-        return True
+        maker = Factory()
+        for tab_child in notebook.get_children():
+            terms = [tab_child]
+            if not maker.isinstance(tab_child, 'Terminal'):
+                terms = enumerate_descendants(tab_child)[1]
+            if term in terms:
+                notebook.get_tab_label(tab_child).set_custom_label(
+                    title, force=True)
+                return True
+        return False
 
     def _h_new_window(self, _args):
         before = self._all_uuids()
@@ -654,7 +680,9 @@ class MCPBridge(plugin.Plugin):
         uuid = self._detect_new(before)
         title = args.get('title')
         if title:
-            self._set_tab_title(uuid, title)
+            new_term = self.terminator.find_terminal_by_uuid(uuid)
+            if new_term is not None:
+                self._set_tab_title(new_term, title)
         return {'uuid': uuid, 'title': title}
 
     def _h_split(self, args):
@@ -668,8 +696,82 @@ class MCPBridge(plugin.Plugin):
         return {'uuid': self._detect_new(before)}
 
     def _h_set_tab_title(self, args):
-        return {'ok': bool(self._set_tab_title(args.get('uuid', ''),
-                                               args.get('title', '')))}
+        term = self._resolve(args.get('uuid', ''))
+        return {'ok': bool(self._set_tab_title(term, args.get('title', ''))),
+                'uuid': term.uuid.urn, 'title': args.get('title', '')}
+
+    def _h_rename_terminal(self, args):
+        """Set a single terminal's titlebar label (persistent, per-terminal).
+
+        Uses titlebar.set_custom_string (same call ipc.py uses), which marks the
+        label custom so the running program's title updates won't override it.
+        """
+        term = self._resolve(args.get('uuid', ''))
+        title = args.get('title', '')
+        term.titlebar.set_custom_string(title)
+        return {'ok': True, 'uuid': term.uuid.urn, 'title': title}
+
+    # ---- handlers: navigation + minimap bookmarks -----------------------
+
+    def _h_scroll_to(self, args):
+        """Scroll a terminal to an absolute row or a named position.
+
+        args: row (int; <0 means bottom) and/or position ('top'|'bottom').
+        Centers the requested row in the viewport.
+        """
+        term = self._resolve(args.get('uuid', ''))
+        adj = term.get_vte().get_vadjustment()
+        lower = adj.get_lower()
+        upper = adj.get_upper()
+        page = adj.get_page_size()
+        bottom = max(lower, upper - page)
+        position = args.get('position')
+        row = args.get('row', None)
+        if position == 'top':
+            value = lower
+        elif position == 'bottom':
+            value = bottom
+        elif row is not None:
+            r = int(row)
+            value = bottom if r < 0 else max(lower, min(bottom, r - page / 2.0))
+        else:
+            value = adj.get_value()
+        adj.set_value(value)
+        return {'ok': True, 'value': int(adj.get_value()),
+                'lower': int(lower), 'upper': int(upper), 'page': int(page)}
+
+    def _h_list_bookmarks(self, args):
+        term = self._resolve(args.get('uuid', ''))
+        mm = getattr(term, 'minimap', None)
+        return {'bookmarks': mm.get_bookmarks() if mm is not None else []}
+
+    def _h_add_bookmark(self, args):
+        """Bookmark a row, found either by absolute row or by text/pattern.
+
+        args: row (int) OR pattern (str, with regex/case_sensitive). When a
+        pattern is given the first matching row is bookmarked and the matched
+        line becomes the default label.
+        """
+        term = self._resolve(args.get('uuid', ''))
+        mm = getattr(term, 'minimap', None)
+        if mm is None:
+            raise _BridgeError('no_minimap')
+
+        pattern = args.get('pattern')
+        if pattern:
+            found, _trunc = self._search_rows(
+                term.get_vte(), pattern, bool(args.get('case_sensitive')),
+                bool(args.get('regex', False)), max_matches=1)
+            if not found:
+                return {'ok': False, 'error': 'pattern_not_found',
+                        'pattern': pattern}
+            row = found[0]['row']
+            label = args.get('label') or found[0]['line'].strip()
+        else:
+            row = int(args.get('row', 0))
+            label = args.get('label', '')
+        bm = mm.add_bookmark(row, label)
+        return {'ok': True, 'bookmark': bm}
 
 
 class _BridgeError(Exception):
