@@ -1,0 +1,20 @@
+[project]
+name = "terminator-mcp"
+version = "0.0.1"
+description = "MCP server to observe and drive a running Terminator terminal emulator"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-2.0-only" }
+dependencies = [
+    "mcp>=1.2.0",
+]
+
+[project.scripts]
+terminator-mcp = "terminator_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["terminator_mcp"]

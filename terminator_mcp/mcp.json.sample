@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "terminator": {
+      "command": "python",
+      "args": ["-m", "terminator_mcp"],
+      "env": {}
+    }
+  }
+}
