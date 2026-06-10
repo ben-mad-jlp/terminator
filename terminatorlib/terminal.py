@@ -1214,6 +1214,20 @@ class Terminal(Gtk.VBox):
         if self.minimap.get_property('visible'):
             self.minimap.refresh_now()
 
+    def do_minimap_mode_toggle(self):
+        """Switch the minimap between activity-strip and scaled-text modes"""
+        self.minimap.toggle_mode()
+
+    def do_minimap_hexlines_toggle(self):
+        """Toggle the hex row-number overlay on the minimap"""
+        self.minimap.toggle_hex_lines()
+
+    def do_bookmark_selection(self):
+        """Bookmark the current selection on the minimap (and show it)"""
+        if not self.minimap.get_property('visible'):
+            self.do_minimap_toggle()
+        self.minimap.bookmark_selection()
+
     def toggle_widget_visibility(self, widget):
         """Show or hide a widget"""
         if widget.get_property('visible'):
