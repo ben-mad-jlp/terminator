@@ -183,7 +183,7 @@ class Window(Container, Gtk.Window):
     def apply_icon(self, requested_icon):
         """Set the window icon"""
         icon_theme = Gtk.IconTheme.get_default()
-        icon_name_list = [APP_NAME]   # disable self.wmclass_name, n/a in GTK3
+        icon_name_list = [APP_NAME, 'terminator']   # fall back to system terminator icon
 
         if requested_icon:
             try:
@@ -293,6 +293,11 @@ class Window(Container, Gtk.Window):
 
     def on_destroy_event(self, widget, data=None):
         """Handle window destruction"""
+        # self.destroy() below re-fires the 'destroy' signal; bail on re-entry
+        # so deregister_window only runs once.
+        if self.isDestroyed:
+            return
+        self.isDestroyed = True
         dbg('destroying self')
         for terminal in self.get_terminals():
             # Only for race condition, while closing a window with a single
@@ -306,7 +311,6 @@ class Window(Container, Gtk.Window):
             terminal.close()
         self.cnxids.remove_all()
         self.terminator.deregister_window(self)
-        self.isDestroyed = True
         self.destroy()
         del(self)
 

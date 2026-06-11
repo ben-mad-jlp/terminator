@@ -1,5 +1,22 @@
-Terminator
-==========
+Terminator (terminator-mcp fork)
+================================
+
+> **This is the `terminator-mcp` fork.** It runs side-by-side with an
+> unmodified system Terminator and adds an MCP bridge plugin so Claude
+> (and other MCP clients) can read from and drive the running terminals.
+> See [`terminator_mcp/README.md`](terminator_mcp/README.md) for install
+> steps, tools, and fork notes (config dir, D-Bus bus name, etc.).
+>
+> Visible additions: minimap, line-number gutter, bookmarks, auto-assigned
+> `term-N` titles, Claude-sparkle launcher icon.
+>
+> Push policy: this fork lives at `ben-mad-jlp/terminator_mcp`; nothing
+> goes upstream to `gnome-terminator/terminator`.
+
+The rest of this README is the upstream Terminator documentation, kept
+as-is for reference.
+
+---
 
 Started by Chris Jones <cmsj@tenshu.net> in 2007, maintained from 2014 to 2020 by Stephen Boddy, currently maintained by Matt Rose. Terminator has had contributions from countless others listed in the [AUTHORS](AUTHORS) file
 

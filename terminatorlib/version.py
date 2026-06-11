@@ -19,5 +19,5 @@
 TerminatorVersion supplies our version number.
 """
 
-APP_NAME = 'terminator'
+APP_NAME = 'terminator-mcp'
 APP_VERSION = '2.1.5'

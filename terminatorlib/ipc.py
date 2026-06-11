@@ -25,8 +25,8 @@ if not CONFIG['dbus']:
     dbg('dbus disabled')
     raise ImportError
 
-BUS_BASE = 'net.tenshu.Terminator2'
-BUS_PATH = '/net/tenshu/Terminator2'
+BUS_BASE = 'net.tenshu.TerminatorMCP'
+BUS_PATH = '/net/tenshu/TerminatorMCP'
 try:
     # Try and include the X11 display name in the dbus bus name
     DISPLAY = Gdk.get_display().partition('.')[0]

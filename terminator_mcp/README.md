@@ -39,32 +39,81 @@ They talk over a per-user Unix socket
 `$TMPDIR/terminator-mcp-$UID/bridge.sock` on macOS). Tools return
 `{"error":"terminator_not_running"}` until Terminator is up with the plugin.
 
-Replace `/path/to/terminator` below with your checkout path.
+Replace `$REPO` below with your checkout path (e.g. `~/Projects/code/terminator_mcp`).
 
 ### Ubuntu / Linux
 
-**A. Plugin**
+This fork is rebranded so it coexists with the system `/usr/bin/terminator`
+without sharing config, plugins, or D-Bus bus name. See
+[Fork notes](#fork-notes) at the bottom for the details.
+
+**A. System deps** (sufficient even if the system `terminator` package isn't
+installed — we just need the GTK/VTE bindings):
 ```bash
-sudo apt install terminator python3-gi gir1.2-vte-2.91 python3-psutil python3-configobj
-mkdir -p ~/.config/terminator/plugins
-cp /path/to/terminator/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator/plugins/
+sudo apt install python3-gi python3-gi-cairo gir1.2-vte-2.91 \
+                 gir1.2-keybinder-3.0 python3-psutil python3-configobj \
+                 python3-venv dbus-x11 gettext
 ```
-Enable it (Preferences → Plugins → tick **MCPBridge**, or in
-`~/.config/terminator/config`):
+
+**B. Plugin + per-fork config dir**
+```bash
+mkdir -p ~/.config/terminator-mcp/plugins
+cp $REPO/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator-mcp/plugins/
+```
+Enable it by writing `~/.config/terminator-mcp/config`:
 ```ini
 [global_config]
   enabled_plugins = MCPBridge
 ```
-Restart Terminator.
 
-**B. MCP server**
+**C. Launcher** (`~/.local/bin/terminator-mcp` — put `~/.local/bin` on `PATH`):
+```bash
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/terminator-mcp <<EOF
+#!/usr/bin/env bash
+exec python3 $REPO/terminator "\$@"
+EOF
+chmod +x ~/.local/bin/terminator-mcp
+```
+
+**D. Sidebar icon + .desktop** (Wayland-friendly: GNOME matches the running
+window's app_id, set via `GLib.set_prgname('terminator-mcp')`, against the
+`.desktop` filename):
+```bash
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+cp $REPO/data/icons/hicolor/scalable/apps/terminator-mcp.svg \
+   ~/.local/share/icons/hicolor/scalable/apps/
+
+mkdir -p ~/.local/share/applications
+cat > ~/.local/share/applications/terminator-mcp.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=Terminator MCP
+GenericName=Terminal
+Comment=Terminator fork with MCP bridge for Claude
+TryExec=terminator-mcp
+Exec=terminator-mcp
+Icon=terminator-mcp
+Terminal=false
+Categories=GTK;Utility;TerminalEmulator;
+StartupNotify=true
+StartupWMClass=terminator-mcp
+EOF
+update-desktop-database ~/.local/share/applications || true
+```
+
+**E. MCP server**
 ```bash
 python3 -m venv ~/.local/share/terminator-mcp/venv
 ~/.local/share/terminator-mcp/venv/bin/pip install mcp
-claude mcp add terminator \
-  --env PYTHONPATH=/path/to/terminator \
+claude mcp add terminator -s user \
+  --env PYTHONPATH=$REPO \
   -- ~/.local/share/terminator-mcp/venv/bin/python -m terminator_mcp
 ```
+
+Now launch `terminator-mcp`. The MCPBridge plugin starts the socket at
+`/run/user/$UID/terminator-mcp-$UID/bridge.sock`. In a *new* Claude session,
+`list_terminals` should return your terminal.
 
 ### macOS (Homebrew GTK)
 
@@ -76,13 +125,13 @@ brew install pygobject3 gtk+3 vte3
 # a venv that can see Homebrew's gi, plus Terminator's pure-python deps
 /opt/homebrew/bin/python3 -m venv --system-site-packages ~/.local/share/terminator-gtk
 ~/.local/share/terminator-gtk/bin/pip install psutil configobj
-mkdir -p ~/.config/terminator/plugins
-cp /path/to/terminator/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator/plugins/
+mkdir -p ~/.config/terminator-mcp/plugins
+cp $REPO/terminatorlib/plugins/mcp_bridge.py ~/.config/terminator-mcp/plugins/
 ```
-Enable `MCPBridge` in `~/.config/terminator/config` (same `[global_config]`
+Enable `MCPBridge` in `~/.config/terminator-mcp/config` (same `[global_config]`
 stanza). Launch Terminator with that Python from the checkout:
 ```bash
-cd /path/to/terminator
+cd $REPO
 ( ulimit -n 1024; ~/.local/share/terminator-gtk/bin/python ./terminator )
 ```
 > **macOS gotcha:** keep `ulimit -n` finite (e.g. `1024`). If it is `unlimited`,
@@ -149,3 +198,23 @@ tools return `{"error": "terminator_not_running"}`.
   bytes unless `raw=true`. It always returns the post-send screen.
 - Command-output capture (`run_command`) is best-effort; interactive TUIs can
   defeat it — fall back to `send_keys` + `read_terminal`.
+
+## Fork notes
+
+This fork is set up to run **alongside** an unmodified system Terminator,
+without sharing state. Specifically:
+
+- **`APP_NAME = 'terminator-mcp'`** (`terminatorlib/version.py`) — drives the
+  Wayland `app_id`, the gettext domain, and the icon-theme lookup name.
+- **Config dir is `~/.config/terminator-mcp/`** (`terminatorlib/util.py`) —
+  fully separate plugins, layouts, and profiles from the system Terminator's
+  `~/.config/terminator/`.
+- **D-Bus bus name is `net.tenshu.TerminatorMCP`** (`terminatorlib/ipc.py`) —
+  `--new-tab`, `--toggle-visibility`, `remotinator`, and the single-instance
+  handoff continue to work *between this fork's windows*, but never collide
+  with the system Terminator's bus. Caveat: the system `/usr/bin/remotinator`
+  won't control this fork (use `$REPO/remotinator` instead).
+- **Icon fallbacks**: split-menu and group-label icons in `window.py` /
+  `titlebar.py` / `terminal_popup_menu.py` use the literal name `terminator`
+  so the existing system icon theme covers them while the app's main icon
+  is `terminator-mcp`.

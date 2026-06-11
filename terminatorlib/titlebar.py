@@ -217,7 +217,7 @@ class Titlebar(Gtk.EventBox):
             self.groupicon.hide()
             return
         
-        self.groupicon.set_from_icon_name(APP_NAME + name, size)
+        self.groupicon.set_from_icon_name('terminator' + name, size)
         self.groupicon.show()
 
     def update_terminal_size(self, width, height):

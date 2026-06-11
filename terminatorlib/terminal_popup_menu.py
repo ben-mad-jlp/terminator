@@ -196,7 +196,7 @@ class TerminalPopupMenu(object):
             item = self.menu_item(Gtk.ImageMenuItem, 'split_horiz',
                                                      _('Split H_orizontally'))
             image = Gtk.Image()
-            image.set_from_icon_name(APP_NAME + '_horiz', Gtk.IconSize.MENU)
+            image.set_from_icon_name('terminator_horiz', Gtk.IconSize.MENU)
             item.set_image(image)
             if hasattr(item, 'set_always_show_image'):
                 item.set_always_show_image(True)
@@ -207,7 +207,7 @@ class TerminalPopupMenu(object):
             item = self.menu_item(Gtk.ImageMenuItem, 'split_vert',
                                                      _('Split V_ertically'))
             image = Gtk.Image()
-            image.set_from_icon_name(APP_NAME + '_vert', Gtk.IconSize.MENU)
+            image.set_from_icon_name('terminator_vert', Gtk.IconSize.MENU)
             item.set_image(image)
             if hasattr(item, 'set_always_show_image'):
                 item.set_always_show_image(True)
